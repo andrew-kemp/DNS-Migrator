@@ -523,60 +523,69 @@ async function startMigration() {
   addLogEntry(`Source: ${state.source}`, 'info');
   addLogEntry('', 'info');
 
-  const payload = {
-    cfToken: state.cf.token,
-    cfAccountId: state.cf.accountId,
-    zones: selectedZones,
-  };
+  const allResults = [];
 
-  if (state.source === 'azure') {
-    payload.azureToken = state.azure.token;
-    payload.subscriptionId = state.azure.subscriptionId;
-  }
+  for (const zone of selectedZones) {
+    const payload = {
+      cfToken: state.cf.token,
+      cfAccountId: state.cf.accountId,
+      zone,
+    };
 
-  try {
-    const res = await fetch('/api/migrate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
+    if (state.source === 'azure') {
+      payload.azureToken = state.azure.token;
+      payload.subscriptionId = state.azure.subscriptionId;
+    }
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let finalResults = null;
+    try {
+      const res = await fetch('/api/migrate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          const event = JSON.parse(line);
-          handleMigrationEvent(event);
-          if (event.type === 'done') finalResults = event.results;
-        } catch { /* non-JSON line */ }
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const event = JSON.parse(line);
+            handleMigrationEvent(event);
+            if (event.type === 'done' && event.results) {
+              allResults.push(...event.results);
+            }
+          } catch { /* non-JSON line */ }
+        }
       }
-    }
 
-    if (buffer.trim()) {
-      try {
-        const event = JSON.parse(buffer);
-        handleMigrationEvent(event);
-        if (event.type === 'done') finalResults = event.results;
-      } catch { /* ignore */ }
+      if (buffer.trim()) {
+        try {
+          const event = JSON.parse(buffer);
+          handleMigrationEvent(event);
+          if (event.type === 'done' && event.results) {
+            allResults.push(...event.results);
+          }
+        } catch { /* ignore */ }
+      }
+    } catch (err) {
+      addLogEntry(`[${zone.name}] Fatal error: ${err.message}`, 'error');
+      allResults.push({ name: zone.name, status: 'failed', created: 0, skipped: 0, failed: 0, nameServers: [], errors: [err.message] });
     }
-
-    if (finalResults) showResults(finalResults);
-  } catch (err) {
-    addLogEntry(`Fatal error: ${err.message}`, 'error');
-    document.getElementById('migration-status').innerHTML = '<span class="text-red-400">Failed</span>';
   }
+
+  addLogEntry('--- Migration complete ---', 'info');
+  document.getElementById('migration-status').innerHTML = '<span class="text-green-400">Complete</span>';
+  if (allResults.length > 0) showResults(allResults);
 }
 
 function handleMigrationEvent(event) {
@@ -605,8 +614,7 @@ function handleMigrationEvent(event) {
       addLogEntry('', 'info');
       break;
     case 'done':
-      addLogEntry('--- Migration complete ---', 'info');
-      document.getElementById('migration-status').innerHTML = '<span class="text-green-400">Complete</span>';
+      // handled by startMigration loop
       break;
   }
 }

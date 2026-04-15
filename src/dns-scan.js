@@ -74,14 +74,15 @@ function parseDohRecords(dohResponse, zoneName) {
     const type = typeNumberToString(ans.type);
     if (!type) continue;
 
+    // Skip records outside our zone (e.g. A records from CNAME chain resolution)
+    if (fullName !== zoneName && !fullName.endsWith(`.${zoneName}`)) continue;
+
     // Calculate relative name
     let name;
     if (fullName === zoneName) {
       name = '@';
-    } else if (fullName.endsWith(`.${zoneName}`)) {
-      name = fullName.slice(0, -(zoneName.length + 1));
     } else {
-      name = fullName;
+      name = fullName.slice(0, -(zoneName.length + 1));
     }
 
     const data = ans.data?.replace(/\.$/, '') || '';

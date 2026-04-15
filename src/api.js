@@ -90,7 +90,8 @@ router.post('/dns/scan', async (req, res) => {
 // ── Migrate: stream progress via NDJSON ─────────────────────────────────────
 
 router.post('/migrate', async (req, res) => {
-  const { cfToken, cfAccountId, zones } = req.body;
+  const { cfToken, cfAccountId, zone, zones: zonesArray } = req.body;
+  const zones = zone ? [zone] : zonesArray;
 
   if (!cfToken || !cfAccountId || !zones?.length) {
     return res.status(400).json({ error: 'Missing required parameters' });

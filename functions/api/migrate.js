@@ -71,8 +71,8 @@ function transformAzureRecords(recordSets, zoneName) {
 
 export async function onRequestPost({ request }) {
   const body = await parseBody(request);
-  if (!body?.cfToken || !body?.cfAccountId || !body?.zones?.length) {
-    return jsonError('Missing required parameters');
+  if (!body?.cfToken || !body?.cfAccountId || !body?.zone) {
+    return jsonError('Missing required parameters (cfToken, cfAccountId, zone)');
   }
 
   const { readable, writable } = new TransformStream();
@@ -84,10 +84,9 @@ export async function onRequestPost({ request }) {
   };
 
   (async () => {
-    const results = [];
+    const zone = body.zone;
 
-    for (const zone of body.zones) {
-      const zoneResult = {
+    const zoneResult = {
         name: zone.name,
         nameServers: [],
         created: 0,
@@ -156,17 +155,14 @@ export async function onRequestPost({ request }) {
         } else {
           await send({ type: 'error', zone: zone.name, message: 'No record source configured' });
           zoneResult.status = 'failed';
-          results.push(zoneResult);
-          continue;
         }
 
         if (!cfRecords || cfRecords.length === 0) {
-          await send({ type: 'info', zone: zone.name, message: 'No records to migrate' });
-          zoneResult.status = 'complete';
-          results.push(zoneResult);
-          await send({ type: 'zone-complete', zone: zone.name, result: zoneResult });
-          continue;
-        }
+          if (zoneResult.status !== 'failed') {
+            await send({ type: 'info', zone: zone.name, message: 'No records to migrate' });
+            zoneResult.status = 'complete';
+          }
+        } else {
 
         // Step 3: Check existing CF records
         await send({ type: 'status', zone: zone.name, message: 'Checking existing Cloudflare records...' });
@@ -220,17 +216,16 @@ export async function onRequestPost({ request }) {
         }
 
         zoneResult.status = zoneResult.failed > 0 ? 'partial' : 'complete';
+        } // end else (has records)
       } catch (err) {
         await send({ type: 'error', zone: zone.name, message: `Zone failed: ${err.message}` });
         zoneResult.status = 'failed';
         zoneResult.errors.push(err.message);
       }
 
-      results.push(zoneResult);
       await send({ type: 'zone-complete', zone: zone.name, result: zoneResult });
-    }
 
-    await send({ type: 'done', results });
+    await send({ type: 'done', results: [zoneResult] });
     await writer.close();
   })();
 

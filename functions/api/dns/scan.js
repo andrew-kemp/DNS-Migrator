@@ -53,7 +53,10 @@ function parseDohRecords(doh, zone) {
     const type = TYPE_MAP[ans.type];
     if (!type) continue;
 
-    let name = fullName === zone ? '@' : fullName.endsWith(`.${zone}`) ? fullName.slice(0, -(zone.length + 1)) : fullName;
+    // Skip records outside our zone (e.g. A records from CNAME chain resolution)
+    if (fullName !== zone && !fullName.endsWith(`.${zone}`)) continue;
+
+    let name = fullName === zone ? '@' : fullName.slice(0, -(zone.length + 1));
     const data = (ans.data || '').replace(/\.$/, '');
     const ttl = ans.TTL || 1;
 

@@ -1,0 +1,21 @@
+{
+  "name": "dns-migrator",
+  "version": "2.0.0",
+  "description": "Migrate DNS zones from any provider to Cloudflare — via web UI",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "pages:dev": "npx wrangler pages dev public --port 3000",
+    "pages:deploy": "npx wrangler pages deploy public"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}

@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DNS Migrator — Migrate to Cloudflare</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .step { display: none; }
+    .step.active { display: block; }
+    .log-entry { font-family: 'Consolas', 'Monaco', monospace; font-size: 0.8rem; padding: 2px 0; }
+    .log-record { color: #22c55e; }
+    .log-skip { color: #eab308; }
+    .log-error { color: #ef4444; }
+    .log-info { color: #60a5fa; }
+    .log-status { color: #a78bfa; }
+    .log-progress { color: #94a3b8; }
+    .spinner { animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .fade-in { animation: fadeIn 0.3s ease-in; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .source-card { transition: all 0.15s; }
+    .source-card:hover { border-color: #f97316; }
+    .source-card.selected { border-color: #f97316; background-color: rgba(249,115,22,0.08); }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen">
+  <!-- Header -->
+  <header class="bg-gray-900 border-b border-gray-800">
+    <div class="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <svg class="w-8 h-8 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+        </svg>
+        <h1 class="text-xl font-bold">DNS Migrator</h1>
+        <span class="text-sm text-gray-500">Any DNS → Cloudflare</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Steps indicator -->
+  <div class="max-w-4xl mx-auto px-6 pt-6">
+    <div class="flex items-center gap-2 text-sm flex-wrap" id="step-indicators">
+      <button onclick="goToStep(1)" class="step-ind flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-600 text-white" data-step="1">
+        <span class="w-5 h-5 flex items-center justify-center rounded-full bg-white/20 text-xs font-bold">1</span>
+        Cloudflare
+      </button>
+      <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+      <button onclick="goToStep(2)" class="step-ind flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-800 text-gray-400" data-step="2" disabled>
+        <span class="w-5 h-5 flex items-center justify-center rounded-full bg-gray-700 text-xs font-bold">2</span>
+        Source
+      </button>
+      <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+      <button onclick="goToStep(3)" class="step-ind flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-800 text-gray-400" data-step="3" disabled>
+        <span class="w-5 h-5 flex items-center justify-center rounded-full bg-gray-700 text-xs font-bold">3</span>
+        Domains
+      </button>
+      <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+      <button onclick="goToStep(4)" class="step-ind flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-gray-800 text-gray-400" data-step="4" disabled>
+        <span class="w-5 h-5 flex items-center justify-center rounded-full bg-gray-700 text-xs font-bold">4</span>
+        Migrate
+      </button>
+    </div>
+  </div>
+
+  <main class="max-w-4xl mx-auto px-6 py-6">
+
+    <!-- ═══════════════ STEP 1: Cloudflare ═══════════════ -->
+    <div class="step active" id="step-1">
+      <div class="bg-gray-900 rounded-xl border border-gray-800 p-6 fade-in">
+        <h2 class="text-lg font-semibold mb-1">Connect to Cloudflare</h2>
+        <p class="text-gray-400 text-sm mb-6">Enter your Cloudflare API token. It needs <strong>Zone:Edit</strong> and <strong>Account:Read</strong> permissions.</p>
+
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1">API Token</label>
+            <input type="password" id="cf-token" placeholder="Enter your Cloudflare API token"
+              class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-gray-100 placeholder-gray-500 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500">
+            <p class="text-xs text-gray-500 mt-1">
+              Don't have a token? Follow the guide below to create one.
+            </p>
+          </div>
+
+          <!-- Token creation guide -->
+          <details class="bg-gray-800/60 border border-gray-700 rounded-lg">
+            <summary class="px-4 py-3 cursor-pointer text-sm font-medium text-orange-400 hover:text-orange-300 select-none flex items-center gap-2">
+              <svg class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+              How to create a Cloudflare API Token
+            </summary>
+            <div class="px-4 pb-4 text-sm text-gray-300 space-y-3">
+              <ol class="list-decimal list-inside space-y-2 ml-1">
+                <li>Log in to <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener" class="text-orange-400 hover:underline">dash.cloudflare.com/profile/api-tokens</a></li>
+                <li>Click <strong class="text-white">Create Token</strong></li>
+                <li>Find the <strong class="text-white">Edit zone DNS</strong> template and click <strong class="text-white">Use template</strong></li>
+                <li>Under <strong class="text-white">Permissions</strong>, you should see <code class="bg-gray-900 px-1.5 py-0.5 rounded text-orange-300 text-xs">Zone &gt; DNS &gt; Edit</code>. Add a second permission:
+                  <ul class="list-disc list-inside ml-4 mt-1 text-gray-400 space-y-1">
+                    <li>Click <strong class="text-white">+ Add more</strong></li>
+                    <li>Select <code class="bg-gray-900 px-1.5 py-0.5 rounded text-orange-300 text-xs">Account</code> &gt; <code class="bg-gray-900 px-1.5 py-0.5 rounded text-orange-300 text-xs">Account Settings</code> &gt; <code class="bg-gray-900 px-1.5 py-0.5 rounded text-orange-300 text-xs">Read</code></li>
+                  </ul>
+                </li>
+                <li>Under <strong class="text-white">Zone Resources</strong>, choose <code class="bg-gray-900 px-1.5 py-0.5 rounded text-orange-300 text-xs">Include &gt; All zones</code> (or limit to specific zones)</li>
+                <li>Click <strong class="text-white">Continue to summary</strong>, then <strong class="text-white">Create Token</strong></li>
+                <li>Copy the token and paste it above — <span class="text-yellow-400">you won't be able to see it again</span></li>
+              </ol>
+              <div class="bg-gray-900 rounded-lg p-3 mt-2">
+                <p class="text-xs text-gray-400"><strong class="text-gray-300">Required permissions summary:</strong></p>
+                <ul class="text-xs text-gray-400 mt-1 space-y-0.5">
+                  <li>• <code class="text-orange-300">Zone &gt; DNS &gt; Edit</code> — create/update DNS records</li>
+                  <li>• <code class="text-orange-300">Zone &gt; Zone &gt; Edit</code> — create new zones (included in template)</li>
+                  <li>• <code class="text-orange-300">Account &gt; Account Settings &gt; Read</code> — list your accounts</li>
+                </ul>
+              </div>
+            </div>
+          </details>
+
+          <div id="cf-account-select" class="hidden">
+            <label class="block text-sm font-medium text-gray-300 mb-1">Account</label>
+            <select id="cf-account"
+              class="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-gray-100 focus:outline-none focus:border-orange-500">
+            </select>
+          </div>
+
+          <div class="flex items-center gap-3">
+            <button onclick="validateCloudflare()" id="cf-validate-btn"
+              class="px-5 py-2.5 bg-orange-600 hover:bg-orange-500 rounded-lg font-medium transition-colors">
+              Validate & Connect
+            </button>
+            <span id="cf-status" class="text-sm"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ STEP 2: DNS Source ═══════════════ -->
+    <div class="step" id="step-2">
+      <div class="bg-gray-900 rounded-xl border border-gray-800 p-6 fade-in">
+        <h2 class="text-lg font-semibold mb-1">Choose DNS Source</h2>
+        <p class="text-gray-400 text-sm mb-6">How do you want to provide domain records?</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <!-- DNS Scan card -->
+          <button onclick="selectSource('scan')" class="source-card text-left border border-gray-700 rounded-xl p-5 bg-gray-800/50" data-source="scan">
+            <div class="flex items-center gap-2 mb-2">
+              <svg class="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              <span class="font-semibold">DNS Scan</span>
+            </div>
+            <p class="text-xs text-gray-400">Works with <strong>any DNS provider</strong>. Scans live DNS records over the internet — no credentials needed from the source.</p>
+          </button>
+
+          <!-- Azure card -->
+          <button onclick="selectSource('azure')" class="source-card text-left border border-gray-700 rounded-xl p-5 bg-gray-800/50" data-source="azure">
+            <div class="flex items-center gap-2 mb-2">
+              <svg class="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z"/></svg>
+              <span class="font-semibold">Azure DNS</span>
+            </div>
+            <p class="text-xs text-gray-400">Connect to Azure with an API token. Gets <strong>all records</strong> including internal names that DNS scan might miss.</p>
+          </button>
+
+          <!-- Manual card -->
+          <button onclick="selectSource('manual')" class="source-card text-left border border-gray-700 rounded-xl p-5 bg-gray-800/50" data-source="manual">
+            <div class="flex items-center gap-2 mb-2">
+              <svg class="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+              <span class="font-semibold">Manual</span>
+            </div>
+            <p class="text-xs text-gray-400">Just enter domain names. Creates zones in Cloudflare <strong>without importing records</strong> — add records later.</p>
+          </button>
+        </div>
+
+        <!-- Source-specific setup (populated dynamically) -->
+        <div id="source-setup"></div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ STEP 3: Domains & Scan ═══════════════ -->
+    <div class="step" id="step-3">
+      <div class="bg-gray-900 rounded-xl border border-gray-800 p-6 fade-in">
+        <h2 class="text-lg font-semibold mb-1" id="step3-title">Select Domains</h2>
+        <p class="text-gray-400 text-sm mb-4" id="step3-desc">Choose domains to migrate.</p>
+
+        <!-- Scan progress (DNS Scan source) -->
+        <div id="scan-progress" class="hidden mb-4">
+          <div class="bg-gray-950 rounded-lg p-4 max-h-48 overflow-y-auto font-mono text-xs space-y-0.5" id="scan-log"></div>
+        </div>
+
+        <div class="flex items-center gap-3 mb-4">
+          <label class="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+            <input type="checkbox" id="select-all" onchange="toggleSelectAll()"
+              class="w-4 h-4 rounded bg-gray-800 border-gray-600 text-orange-500 focus:ring-orange-500">
+            Select All
+          </label>
+          <span id="zone-count" class="text-xs text-gray-500"></span>
+        </div>
+
+        <div id="zone-list" class="space-y-2 max-h-96 overflow-y-auto pr-2">
+          <!-- Populated by JS -->
+        </div>
+
+        <div class="flex items-center gap-3 mt-6">
+          <button onclick="startMigration()" id="migrate-btn"
+            class="px-5 py-2.5 bg-orange-600 hover:bg-orange-500 rounded-lg font-medium transition-colors" disabled>
+            Migrate Selected Zones
+          </button>
+          <span id="zone-selected-count" class="text-sm text-gray-400"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════════ STEP 4: Migration ═══════════════ -->
+    <div class="step" id="step-4">
+      <!-- Progress log -->
+      <div class="bg-gray-900 rounded-xl border border-gray-800 p-6 fade-in mb-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold">Migration Progress</h2>
+          <span id="migration-status" class="text-sm px-3 py-1 rounded-full bg-blue-900 text-blue-300">
+            <svg class="w-4 h-4 inline spinner" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            Running...
+          </span>
+        </div>
+        <div id="migration-log" class="bg-gray-950 rounded-lg p-4 max-h-80 overflow-y-auto font-mono text-xs space-y-0.5">
+          <!-- Log entries appear here -->
+        </div>
+      </div>
+
+      <!-- Results (shown after migration) -->
+      <div id="migration-results" class="hidden">
+        <div class="bg-gray-900 rounded-xl border border-gray-800 p-6 fade-in">
+          <h2 class="text-lg font-semibold mb-4">Migration Results</h2>
+
+          <div id="results-cards" class="space-y-4">
+            <!-- Populated by JS -->
+          </div>
+
+          <!-- Dynamic next-steps populated by showResults() -->
+          <div id="next-steps" class="mt-6 p-4 bg-gray-800 rounded-lg"></div>
+
+          <div class="mt-4 flex gap-3">
+            <button onclick="location.reload()"
+              class="px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm font-medium transition-colors">
+              Migrate More Zones
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <footer class="max-w-4xl mx-auto px-6 py-8 text-center text-xs text-gray-600">
+    DNS Migrator — Tokens are used in-memory only and never stored.
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

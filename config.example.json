@@ -1,0 +1,14 @@
+{
+  "zones": [
+    {
+      "zoneName": "andykemp.com",
+      "resourceGroup": "my-dns-resource-group",
+      "cloudflareZoneId": "paste-cloudflare-zone-id-here"
+    },
+    {
+      "zoneName": "example.co.uk",
+      "resourceGroup": "my-dns-resource-group",
+      "cloudflareZoneId": "paste-cloudflare-zone-id-here"
+    }
+  ]
+}

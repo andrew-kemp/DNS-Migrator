@@ -179,15 +179,17 @@ export async function onRequestPost({ request }) {
           page++;
         }
 
-        // Step 4: Push records
-        await send({ type: 'status', zone: zone.name, message: `Pushing ${cfRecords.length} records to Cloudflare...` });
+        // Step 4: Push records in parallel batches
+        const BATCH_SIZE = 5;
+        await send({ type: 'status', zone: zone.name, message: `Pushing ${cfRecords.length} records to Cloudflare (${BATCH_SIZE} at a time)...` });
 
+        // Pre-filter duplicates first (no API calls needed)
+        const toCreate = [];
         for (let i = 0; i < cfRecords.length; i++) {
           const rec = cfRecords[i];
           const displayName = rec.name === '@' ? zone.name : `${rec.name}.${zone.name}`;
           const displayContent = rec.content || JSON.stringify(rec.data || {});
 
-          // Duplicate check
           const isDup = existingRecords.some((er) => {
             const nameMatch = er.name === displayName || er.name === rec.name ||
               (rec.name === '@' && er.name === zone.name);
@@ -195,28 +197,40 @@ export async function onRequestPost({ request }) {
           });
 
           if (isDup) {
-            await send({ type: 'skip', zone: zone.name, message: `[${i + 1}/${cfRecords.length}] ${rec.type} ${displayName} — already exists` });
+            await send({ type: 'skip', zone: zone.name, message: `${rec.type} ${displayName} — already exists` });
             zoneResult.skipped++;
             zoneResult.skippedRecords.push({ type: rec.type, name: displayName, content: displayContent, reason: 'Already exists in Cloudflare' });
-            continue;
-          }
-
-          const result = await cfFetch(body.cfToken, 'POST', `/zones/${cfZone.id}/dns_records`, rec);
-
-          if (result.success) {
-            await send({ type: 'record', zone: zone.name, message: `[${i + 1}/${cfRecords.length}] ${rec.type} ${displayName} → ${displayContent}` });
-            zoneResult.created++;
           } else {
-            const errMsg = result.errors?.map((e) => e.message).join('; ') || 'Unknown error';
-            if (errMsg.includes('already exists')) {
-              await send({ type: 'skip', zone: zone.name, message: `[${i + 1}/${cfRecords.length}] ${rec.type} ${displayName} — already exists` });
-              zoneResult.skipped++;
-              zoneResult.skippedRecords.push({ type: rec.type, name: displayName, content: displayContent, reason: 'Already exists in Cloudflare' });
+            toCreate.push({ rec, displayName, displayContent, index: i });
+          }
+        }
+
+        // Push in parallel batches
+        for (let b = 0; b < toCreate.length; b += BATCH_SIZE) {
+          const batch = toCreate.slice(b, b + BATCH_SIZE);
+          const results = await Promise.all(
+            batch.map(({ rec }) => cfFetch(body.cfToken, 'POST', `/zones/${cfZone.id}/dns_records`, rec))
+          );
+
+          for (let j = 0; j < batch.length; j++) {
+            const { rec, displayName, displayContent } = batch[j];
+            const result = results[j];
+
+            if (result.success) {
+              await send({ type: 'record', zone: zone.name, message: `[${b + j + 1}/${toCreate.length}] ${rec.type} ${displayName} → ${displayContent}` });
+              zoneResult.created++;
             } else {
-              await send({ type: 'error', zone: zone.name, message: `[${i + 1}/${cfRecords.length}] ${rec.type} ${displayName} — ${errMsg}` });
-              zoneResult.failed++;
-              zoneResult.errors.push(`${rec.type} ${displayName}: ${errMsg}`);
-              zoneResult.failedRecords.push({ type: rec.type, name: displayName, content: displayContent, error: errMsg });
+              const errMsg = result.errors?.map((e) => e.message).join('; ') || 'Unknown error';
+              if (errMsg.includes('already exists')) {
+                await send({ type: 'skip', zone: zone.name, message: `${rec.type} ${displayName} — already exists` });
+                zoneResult.skipped++;
+                zoneResult.skippedRecords.push({ type: rec.type, name: displayName, content: displayContent, reason: 'Already exists in Cloudflare' });
+              } else {
+                await send({ type: 'error', zone: zone.name, message: `${rec.type} ${displayName} — ${errMsg}` });
+                zoneResult.failed++;
+                zoneResult.errors.push(`${rec.type} ${displayName}: ${errMsg}`);
+                zoneResult.failedRecords.push({ type: rec.type, name: displayName, content: displayContent, error: errMsg });
+              }
             }
           }
         }

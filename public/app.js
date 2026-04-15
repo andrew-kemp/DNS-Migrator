@@ -525,7 +525,10 @@ async function startMigration() {
 
   const allResults = [];
 
-  for (const zone of selectedZones) {
+  // Process domains in parallel batches of 3
+  const DOMAIN_CONCURRENCY = 3;
+
+  async function migrateSingleZone(zone) {
     const payload = {
       cfToken: state.cf.token,
       cfAccountId: state.cf.accountId,
@@ -547,6 +550,7 @@ async function startMigration() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let result = null;
 
       while (true) {
         const { done, value } = await reader.read();
@@ -562,7 +566,7 @@ async function startMigration() {
             const event = JSON.parse(line);
             handleMigrationEvent(event);
             if (event.type === 'done' && event.results) {
-              allResults.push(...event.results);
+              result = event.results;
             }
           } catch { /* non-JSON line */ }
         }
@@ -573,14 +577,22 @@ async function startMigration() {
           const event = JSON.parse(buffer);
           handleMigrationEvent(event);
           if (event.type === 'done' && event.results) {
-            allResults.push(...event.results);
+            result = event.results;
           }
         } catch { /* ignore */ }
       }
+
+      return result || [];
     } catch (err) {
       addLogEntry(`[${zone.name}] Fatal error: ${err.message}`, 'error');
-      allResults.push({ name: zone.name, status: 'failed', created: 0, skipped: 0, failed: 0, nameServers: [], errors: [err.message] });
+      return [{ name: zone.name, status: 'failed', created: 0, skipped: 0, failed: 0, nameServers: [], errors: [err.message] }];
     }
+  }
+
+  for (let i = 0; i < selectedZones.length; i += DOMAIN_CONCURRENCY) {
+    const batch = selectedZones.slice(i, i + DOMAIN_CONCURRENCY);
+    const batchResults = await Promise.all(batch.map(migrateSingleZone));
+    for (const r of batchResults) allResults.push(...r);
   }
 
   addLogEntry('--- Migration complete ---', 'info');

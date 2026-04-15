@@ -109,7 +109,102 @@ export async function onRequestPost({ request }) {
         if (existingZone.success && existingZone.result?.length > 0) {
           cfZone = existingZone.result[0];
           alreadyExisted = true;
-          await send({ type: 'info', zone: zone.name, message: 'Zone already exists in Cloudflare — adding records to it' });
+
+          // Check if domain is already active (nameservers verified)
+          if (cfZone.status === 'active') {
+            await send({ type: 'info', zone: zone.name, message: `Zone is already active on Cloudflare — nameservers verified` });
+            zoneResult.nameServers = cfZone.name_servers || [];
+            zoneResult.status = 'active';
+            zoneResult.cfStatus = 'active';
+
+            // Still check for any missing records that need adding
+            let cfRecords;
+            if (zone.source === 'azure' && body.azureToken) {
+              await send({ type: 'status', zone: zone.name, message: 'Checking for missing records in Azure DNS...' });
+              let azureRecords = [];
+              let url = `${AZURE_MGMT_URL}/subscriptions/${encodeURIComponent(body.subscriptionId)}/resourceGroups/${encodeURIComponent(zone.resourceGroup)}/providers/Microsoft.Network/dnsZones/${encodeURIComponent(zone.name)}/recordsets?api-version=${DNS_API_VERSION}&$top=500`;
+              while (url) {
+                const data = await azureFetch(body.azureToken, url);
+                azureRecords.push(...data.value);
+                url = data.nextLink || null;
+              }
+              const { records, skipped } = transformAzureRecords(azureRecords, zone.name);
+              cfRecords = records;
+              zoneResult.skipped += skipped.length;
+              for (const s of skipped) {
+                zoneResult.skippedRecords.push({ type: s.type, name: s.name, reason: s.reason });
+              }
+            } else if (zone.records) {
+              cfRecords = zone.records;
+            } else {
+              cfRecords = [];
+            }
+
+            if (cfRecords && cfRecords.length > 0) {
+              // Fetch existing CF records
+              let existingRecords = [];
+              let page = 1;
+              while (true) {
+                const data = await cfFetch(body.cfToken, 'GET', `/zones/${cfZone.id}/dns_records?per_page=100&page=${page}`);
+                if (!data.success) break;
+                existingRecords.push(...data.result);
+                if (page >= data.result_info.total_pages) break;
+                page++;
+              }
+
+              // Find records that are missing
+              const toCreate = [];
+              for (const rec of cfRecords) {
+                const displayName = rec.name === '@' ? zone.name : `${rec.name}.${zone.name}`;
+                const displayContent = rec.content || JSON.stringify(rec.data || {});
+                const isDup = existingRecords.some((er) => {
+                  const nameMatch = er.name === displayName || er.name === rec.name ||
+                    (rec.name === '@' && er.name === zone.name);
+                  return er.type === rec.type && nameMatch && (!rec.content || er.content === rec.content);
+                });
+                if (isDup) {
+                  zoneResult.skipped++;
+                  zoneResult.skippedRecords.push({ type: rec.type, name: displayName, content: displayContent, reason: 'Already exists in Cloudflare' });
+                } else {
+                  toCreate.push({ rec, displayName, displayContent });
+                }
+              }
+
+              if (toCreate.length > 0) {
+                await send({ type: 'info', zone: zone.name, message: `Found ${toCreate.length} missing record(s) — adding them now` });
+                const BATCH_SIZE = 5;
+                for (let b = 0; b < toCreate.length; b += BATCH_SIZE) {
+                  const batch = toCreate.slice(b, b + BATCH_SIZE);
+                  const results = await Promise.all(
+                    batch.map(({ rec }) => cfFetch(body.cfToken, 'POST', `/zones/${cfZone.id}/dns_records`, rec))
+                  );
+                  for (let j = 0; j < batch.length; j++) {
+                    const { rec, displayName, displayContent } = batch[j];
+                    const result = results[j];
+                    if (result.success) {
+                      await send({ type: 'record', zone: zone.name, message: `${rec.type} ${displayName} → ${displayContent}` });
+                      zoneResult.created++;
+                    } else {
+                      const errMsg = result.errors?.map((e) => e.message).join('; ') || 'Unknown error';
+                      await send({ type: 'error', zone: zone.name, message: `${rec.type} ${displayName} — ${errMsg}` });
+                      zoneResult.failed++;
+                      zoneResult.failedRecords.push({ type: rec.type, name: displayName, content: displayContent, error: errMsg });
+                    }
+                  }
+                }
+                zoneResult.status = zoneResult.failed > 0 ? 'partial' : 'active';
+              } else {
+                await send({ type: 'info', zone: zone.name, message: 'All records already present — nothing to add' });
+              }
+            }
+
+            await send({ type: 'zone-complete', zone: zone.name, result: zoneResult });
+            await send({ type: 'done', results: [zoneResult] });
+            await writer.close();
+            return;
+          }
+
+          await send({ type: 'info', zone: zone.name, message: `Zone exists in Cloudflare (status: ${cfZone.status}) — adding records to it` });
         } else {
           const createRes = await cfFetch(body.cfToken, 'POST', '/zones', {
             name: zone.name,

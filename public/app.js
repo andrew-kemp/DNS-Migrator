@@ -685,8 +685,10 @@ function showResults(results) {
   container.innerHTML = '';
 
   for (const r of results) {
-    const statusColor = r.status === 'complete' ? 'green' : r.status === 'partial' ? 'yellow' : 'red';
-    const statusIcon = r.status === 'complete' ? '+' : r.status === 'partial' ? '!' : 'x';
+    const isActive = r.status === 'active' || r.cfStatus === 'active';
+    const statusColor = isActive ? 'cyan' : r.status === 'complete' ? 'green' : r.status === 'partial' ? 'yellow' : 'red';
+    const statusIcon = isActive ? '✓' : r.status === 'complete' ? '+' : r.status === 'partial' ? '!' : 'x';
+    const statusLabel = isActive ? (r.created > 0 ? `active + ${r.created} added` : 'active on CF') : r.status;
     const nsHtml = r.nameServers.length > 0
       ? r.nameServers.map((ns) => `
           <div class="flex items-center justify-between bg-gray-900 rounded px-3 py-2">
@@ -701,7 +703,7 @@ function showResults(results) {
     card.innerHTML = `
       <div class="flex items-center justify-between mb-3">
         <h3 class="font-semibold text-lg">${escapeHtml(r.name)}</h3>
-        <span class="text-${statusColor}-400 text-sm font-medium">${statusIcon} ${r.status}</span>
+        <span class="text-${statusColor}-400 text-sm font-medium">${statusIcon} ${statusLabel}</span>
       </div>
       <div class="grid grid-cols-3 gap-4 mb-4 text-center">
         <div class="bg-gray-900 rounded-lg p-3">

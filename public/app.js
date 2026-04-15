@@ -389,29 +389,41 @@ async function validateAzure() {
 }
 
 async function loadAzureZones() {
-  const res = await api('/azure/zones', {
-    token: state.azure.token,
-    subscriptionId: state.azure.subscriptionId,
-  });
-  const data = await res.json();
+  setStatus('az-status', 'Loading DNS zones...', 'info');
 
-  if (!data.success) {
-    setStatus('az-status', data.error || 'Failed to load zones', 'error');
-    return;
+  try {
+    const res = await api('/azure/zones', {
+      token: state.azure.token,
+      subscriptionId: state.azure.subscriptionId,
+    });
+    const data = await res.json();
+
+    if (!res.ok || !data.success) {
+      setStatus('az-status', data.error || `Failed to load zones (HTTP ${res.status})`, 'error');
+      return;
+    }
+
+    if (!data.zones || data.zones.length === 0) {
+      setStatus('az-status', 'No DNS zones found in this subscription. Try selecting a different subscription if you have multiple.', 'error');
+      return;
+    }
+
+    state.zones = data.zones.map((z) => ({
+      name: z.name,
+      source: 'azure',
+      resourceGroup: z.resourceGroup,
+      recordCount: z.numberOfRecordSets,
+    }));
+
+    setStatus('az-status', `Found ${state.zones.length} DNS zone(s)`, 'success');
+    document.getElementById('step3-title').textContent = 'Select Azure DNS Zones';
+    document.getElementById('step3-desc').textContent = 'Choose which zones to migrate to Cloudflare.';
+    document.getElementById('scan-progress').classList.add('hidden');
+    renderZoneList();
+    advanceToStep(3);
+  } catch (err) {
+    setStatus('az-status', `Failed to load zones: ${err.message}`, 'error');
   }
-
-  state.zones = data.zones.map((z) => ({
-    name: z.name,
-    source: 'azure',
-    resourceGroup: z.resourceGroup,
-    recordCount: z.numberOfRecordSets,
-  }));
-
-  document.getElementById('step3-title').textContent = 'Select Azure DNS Zones';
-  document.getElementById('step3-desc').textContent = 'Choose which zones to migrate to Cloudflare.';
-  document.getElementById('scan-progress').classList.add('hidden');
-  renderZoneList();
-  advanceToStep(3);
 }
 
 // ── Manual source ───────────────────────────────────────────────────────────

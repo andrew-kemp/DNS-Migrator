@@ -92,10 +92,10 @@
                 <li>Log in to <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noopener" class="text-orange-400 hover:underline">dash.cloudflare.com/profile/api-tokens</a></li>
                 <li>Click <strong class="text-white">Create Token</strong></li>
                 <li>Find the <strong class="text-white">Edit zone DNS</strong> template and click <strong class="text-white">Use template</strong></li>
-                <li>Under <strong class="text-white">Permissions</strong>, you should see <code class="bg-gray-900 px-1.5 py-0.5 rounded text-orange-300 text-xs">Zone &gt; DNS &gt; Edit</code>. Add a second permission:
+                <li>Under <strong class="text-white">Permissions</strong>, you should see <code class="bg-gray-900 px-1.5 py-0.5 rounded text-orange-300 text-xs">Zone &gt; DNS &gt; Edit</code>. You need to add <strong class="text-white">two more</strong> permissions:
                   <ul class="list-disc list-inside ml-4 mt-1 text-gray-400 space-y-1">
-                    <li>Click <strong class="text-white">+ Add more</strong></li>
-                    <li>Select <code class="bg-gray-900 px-1.5 py-0.5 rounded text-orange-300 text-xs">Account</code> &gt; <code class="bg-gray-900 px-1.5 py-0.5 rounded text-orange-300 text-xs">Account Settings</code> &gt; <code class="bg-gray-900 px-1.5 py-0.5 rounded text-orange-300 text-xs">Read</code></li>
+                    <li>Click <strong class="text-white">+ Add more</strong> &rarr; <code class="bg-gray-900 px-1.5 py-0.5 rounded text-orange-300 text-xs">Zone</code> &gt; <code class="bg-gray-900 px-1.5 py-0.5 rounded text-orange-300 text-xs">Zone</code> &gt; <code class="bg-gray-900 px-1.5 py-0.5 rounded text-orange-300 text-xs">Edit</code> <span class="text-yellow-400">(required to create new zones)</span></li>
+                    <li>Click <strong class="text-white">+ Add more</strong> &rarr; <code class="bg-gray-900 px-1.5 py-0.5 rounded text-orange-300 text-xs">Account</code> &gt; <code class="bg-gray-900 px-1.5 py-0.5 rounded text-orange-300 text-xs">Account Settings</code> &gt; <code class="bg-gray-900 px-1.5 py-0.5 rounded text-orange-300 text-xs">Read</code></li>
                   </ul>
                 </li>
                 <li>Under <strong class="text-white">Zone Resources</strong>, choose <code class="bg-gray-900 px-1.5 py-0.5 rounded text-orange-300 text-xs">Include &gt; All zones</code> (or limit to specific zones)</li>
@@ -106,7 +106,7 @@
                 <p class="text-xs text-gray-400"><strong class="text-gray-300">Required permissions summary:</strong></p>
                 <ul class="text-xs text-gray-400 mt-1 space-y-0.5">
                   <li>• <code class="text-orange-300">Zone &gt; DNS &gt; Edit</code> — create/update DNS records</li>
-                  <li>• <code class="text-orange-300">Zone &gt; Zone &gt; Edit</code> — create new zones (included in template)</li>
+                  <li>• <code class="text-orange-300">Zone &gt; Zone &gt; Edit</code> — create new zones <span class="text-yellow-400">(must be added manually)</span></li>
                   <li>• <code class="text-orange-300">Account &gt; Account Settings &gt; Read</code> — list your accounts</li>
                 </ul>
               </div>

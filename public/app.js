@@ -619,6 +619,55 @@ function handleMigrationEvent(event) {
   }
 }
 
+function buildRecordDetails(r) {
+  let html = '';
+  if (r.skippedRecords && r.skippedRecords.length > 0) {
+    const rows = r.skippedRecords.map(s => `
+      <tr class="border-t border-gray-700">
+        <td class="py-1 pr-2 text-yellow-400 text-xs font-mono">${escapeHtml(s.type)}</td>
+        <td class="py-1 pr-2 text-xs text-gray-300 font-mono truncate max-w-[180px]" title="${escapeHtml(s.name)}">${escapeHtml(s.name)}</td>
+        <td class="py-1 pr-2 text-xs text-gray-400 font-mono truncate max-w-[200px]" title="${escapeHtml(s.content || '')}">${escapeHtml(s.content || '-')}</td>
+        <td class="py-1 text-xs text-gray-500">${escapeHtml(s.reason)}</td>
+      </tr>
+    `).join('');
+    html += `
+      <details class="mb-3">
+        <summary class="cursor-pointer text-sm text-yellow-400 hover:text-yellow-300 mb-1">Skipped records (${r.skippedRecords.length})</summary>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left mt-1">
+            <thead><tr class="text-xs text-gray-500">
+              <th class="pb-1 pr-2">Type</th><th class="pb-1 pr-2">Name</th><th class="pb-1 pr-2">Value</th><th class="pb-1">Reason</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </details>`;
+  }
+  if (r.failedRecords && r.failedRecords.length > 0) {
+    const rows = r.failedRecords.map(f => `
+      <tr class="border-t border-gray-700">
+        <td class="py-1 pr-2 text-red-400 text-xs font-mono">${escapeHtml(f.type)}</td>
+        <td class="py-1 pr-2 text-xs text-gray-300 font-mono truncate max-w-[180px]" title="${escapeHtml(f.name)}">${escapeHtml(f.name)}</td>
+        <td class="py-1 pr-2 text-xs text-gray-400 font-mono truncate max-w-[200px]" title="${escapeHtml(f.content || '')}">${escapeHtml(f.content || '-')}</td>
+        <td class="py-1 text-xs text-red-300">${escapeHtml(f.error)}</td>
+      </tr>
+    `).join('');
+    html += `
+      <details class="mb-3" open>
+        <summary class="cursor-pointer text-sm text-red-400 hover:text-red-300 mb-1">Failed records (${r.failedRecords.length})</summary>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left mt-1">
+            <thead><tr class="text-xs text-gray-500">
+              <th class="pb-1 pr-2">Type</th><th class="pb-1 pr-2">Name</th><th class="pb-1 pr-2">Value</th><th class="pb-1">Error</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      </details>`;
+  }
+  return html;
+}
+
 function showResults(results) {
   const container = document.getElementById('results-cards');
   container.innerHTML = '';
@@ -656,6 +705,7 @@ function showResults(results) {
           <div class="text-xs text-gray-500">Failed</div>
         </div>
       </div>
+      ${buildRecordDetails(r)}
       <div>
         <div class="flex items-center justify-between mb-2">
           <h4 class="text-sm font-medium text-gray-300">Nameservers</h4>

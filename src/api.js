@@ -113,6 +113,8 @@ router.post('/migrate', async (req, res) => {
       skipped: 0,
       failed: 0,
       errors: [],
+      skippedRecords: [],
+      failedRecords: [],
       status: 'pending',
     };
 
@@ -143,6 +145,7 @@ router.post('/migrate', async (req, res) => {
         cfRecords = records;
         for (const s of skipped) {
           send({ type: 'skip', zone: zone.name, message: `Skipped ${s.type} ${s.name}: ${s.reason}` });
+          zoneResult.skippedRecords.push({ type: s.type, name: s.name, reason: s.reason });
         }
         zoneResult.skipped += skipped.length;
 
@@ -188,6 +191,7 @@ router.post('/migrate', async (req, res) => {
         if (isDuplicate) {
           send({ type: 'skip', zone: zone.name, message: `[${i + 1}/${cfRecords.length}] ${rec.type} ${displayName} — already exists` });
           zoneResult.skipped++;
+          zoneResult.skippedRecords.push({ type: rec.type, name: displayName, content: displayContent, reason: 'Already exists in Cloudflare' });
           continue;
         }
 
@@ -201,10 +205,12 @@ router.post('/migrate', async (req, res) => {
           if (errMsg.includes('already exists')) {
             send({ type: 'skip', zone: zone.name, message: `[${i + 1}/${cfRecords.length}] ${rec.type} ${displayName} — already exists` });
             zoneResult.skipped++;
+            zoneResult.skippedRecords.push({ type: rec.type, name: displayName, content: displayContent, reason: 'Already exists in Cloudflare' });
           } else {
             send({ type: 'error', zone: zone.name, message: `[${i + 1}/${cfRecords.length}] ${rec.type} ${displayName} — ${errMsg}` });
             zoneResult.failed++;
             zoneResult.errors.push(`${rec.type} ${displayName}: ${errMsg}`);
+            zoneResult.failedRecords.push({ type: rec.type, name: displayName, content: displayContent, error: errMsg });
           }
         }
       }
